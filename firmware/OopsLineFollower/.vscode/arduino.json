@@ -1,0 +1,6 @@
+{
+    "board": "arduino:avr:nano",
+    "sketch": "oopslinefollower.ino",
+    "configuration": "cpu=atmega328old",
+    "programmer": "AVR ISP"
+}
