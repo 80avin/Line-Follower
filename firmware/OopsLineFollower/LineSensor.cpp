@@ -1,24 +1,31 @@
 #include "LineSensor.hpp"
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "configs.hpp"
 
 LineSensor::LineSensor(){
     for(int i = 0; i < IR_PINS_COUNT; i++) {
         pinMode(pins[i], INPUT);
     }
+    pinMode(pin_calib, INPUT_PULLUP);
     irValMax=IR_CALIB_MIN;
 }
 
-LineSensor::LineSensor(const uint8_t _pins[], int _pitch):pitch(_pitch) {
+LineSensor::LineSensor(const uint8_t _pins[], const int& _pitch):pitch(_pitch) {
     for(int i = 0; i < IR_PINS_COUNT; i++) {
         pins[i] = _pins[i];
         pinMode(pins[i], INPUT);
     }
+    pinMode(pin_calib, INPUT_PULLUP);
     irValMax=IR_CALIB_MIN;
 }
 
 bool LineSensor::isOnLine(){
     return irValMax>IR_NOLINE_THRESH;
+}
+
+bool LineSensor::shouldCalibrate(){
+    return (digitalRead(pin_calib)==LOW) || (!loadCalib());
 }
 
 void LineSensor::calibrate() {
@@ -61,17 +68,47 @@ void LineSensor::calibrate() {
 void LineSensor::read() {
     // read from the IRs and map them according to the calibration values
     irValMax=IR_CALIB_MIN;
+    int onLineIRs = 0;
+    for(int i = 0; i < IR_PINS_COUNT; i++) {
+        irVal[i] = analogRead(pins[i]);
+        irVal[i] = constrain(irVal[i], calib_vals_min[i], calib_vals_max[i]);
+        irVal[i] = map(irVal[i], calib_vals_min[i], calib_vals_max[i], IR_CALIB_MIN, IR_CALIB_MAX);
+        if(irVal[i]>IR_NOLINE_THRESH) ++onLineIRs;
+        #if DEBUG_ALL_IRS
+        Serial.print(irVal[i]);
+        Serial.print(',');
+        #endif
+    }
+    // on inverted line
+    if(onLineIRs > IR_PINS_COUNT/2){
+        for(int i = 0; i < IR_PINS_COUNT; i++) {
+            irVal[i] = IR_CALIB_MIN + IR_CALIB_MAX - irVal[i];
+            irValMax = (irValMax>=irVal[i])?irValMax:irVal[i];
+        }
+    }
+    else{
+        for(int i = 0; i < IR_PINS_COUNT; i++) {
+            irValMax = (irValMax>=irVal[i])?irValMax:irVal[i];
+        }
+    }
+        #if DEBUG_ALL_IRS
+        Serial.println(' ');
+        #endif
+}
+void LineSensor::oldRead() {
+    // read from the IRs and map them according to the calibration values
+    irValMax=IR_CALIB_MIN;
     for(int i = 0; i < IR_PINS_COUNT; i++) {
         irVal[i] = analogRead(pins[i]);
         irVal[i] = constrain(irVal[i], calib_vals_min[i], calib_vals_max[i]);
         irVal[i] = map(irVal[i], calib_vals_min[i], calib_vals_max[i], IR_CALIB_MIN, IR_CALIB_MAX);
         irValMax = (irValMax>=irVal[i])?irValMax:irVal[i];
-        #if DEBUG&0
+        #if DEBUG_ALL_IRS
         Serial.print(irVal[i]);
         Serial.print(',');
         #endif
     }
-        #if DEBUG&0
+        #if DEBUG_ALL_IRS
         Serial.println(' ');
         #endif
 }
@@ -90,7 +127,7 @@ void LineSensor::readSamples() {
         tmp = analogRead(pins[i]);
         irVal[i] = constrain(tmp, calib_vals_min[i], calib_vals_max[i]);
         irVal[i] = map(((SAMPLE_FADE*irVal[i]*j) + tmp)/(j+1.0), calib_vals_min[i], calib_vals_max[i], IR_CALIB_MIN, IR_CALIB_MAX);
-        #if DEBUG&0
+        #if DEBUG_ALL_IRS
         Serial.print(irVal[i]);
         Serial.print(',');
         #endif
@@ -101,7 +138,7 @@ void LineSensor::readSamples() {
 				   
 							
 			  
-        #if DEBUG&0
+        #if DEBUG_ALL_IRS
         Serial.println(' ');
         #endif
 }

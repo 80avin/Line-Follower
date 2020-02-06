@@ -15,7 +15,7 @@ float current_position = 0;
 float speed_diff = 0;
 float speed_left = 0;
 float speed_right = 0;
-float smooth_position;
+uint16_t last_read_ms = 0;
 // create IR array board object
 LineSensor ir_array(ir_pins, IR_PITCH);
 
@@ -24,18 +24,15 @@ Controller ctrl(CONTROL_KP, CONTROL_KI, CONTROL_KD, CONTROL_I_MIN, CONTROL_I_MAX
 
 void setup() {
 #if DEBUG
-
     Serial.begin(115200);
 #endif
-    if(!ir_array.loadCalib()){
+    if(ir_array.shouldCalibrate()){
         ir_array.calibrate();
         ir_array.saveCalib();
     }
 }
 
 void loop() {
-    smooth_position = 0;
-
     ir_array.read();
     if (ir_array.isOnLine()) {
         current_position = ir_array.interpolate();
@@ -48,6 +45,11 @@ void loop() {
         speed_left = constrain(MAX_SPEED_L + speed_diff, 0, 255);
         speed_right = constrain(MAX_SPEED_R - speed_diff, 0, 255);
     }
+    else if(last_read_ms + IR_MISS_DELAY_MS > millis()){
+        left_motor.write(MAX_SPEED_L);
+        right_motor.write(MAX_SPEED_R);
+        return;
+    }
 
 #if DEBUG
     Serial.print(current_position);
@@ -58,6 +60,6 @@ void loop() {
     Serial.print(',');
     Serial.println(speed_right);
 #endif
-    right_motor.write(speed_right);
     left_motor.write(speed_left);
+    right_motor.write(speed_right);
 }
